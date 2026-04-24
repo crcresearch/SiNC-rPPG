@@ -1,13 +1,13 @@
-import torch
 import numpy as np
-from datasets.PURE import PURE
+import torch
+
 import datasets.transforms as transforms
+from datasets.PURE import PURE
 
 
 class PURESupervised(PURE):
     def __init__(self, split, arg_obj):
         super().__init__(split, arg_obj)
-
 
     def set_augmentations(self):
         self.aug_flip = False
@@ -15,24 +15,23 @@ class PURESupervised(PURE):
         self.aug_gauss = False
         self.aug_speed = False
         self.aug_resizedcrop = False
-        if self.split == 'train':
-            self.aug_flip = True if 'f' in self.aug else False
-            self.aug_illum = True if 'i' in self.aug else False
-            self.aug_gauss = True if 'g' in self.aug else False
-            self.aug_speed = True if 's' in self.aug else False
-            self.aug_resizedcrop = True if 'c' in self.aug else False
-        self.aug_reverse = False ## Don't use this with supervised
-
+        if self.split == "train":
+            self.aug_flip = True if "f" in self.aug else False
+            self.aug_illum = True if "i" in self.aug else False
+            self.aug_gauss = True if "g" in self.aug else False
+            self.aug_speed = True if "s" in self.aug else False
+            self.aug_resizedcrop = True if "c" in self.aug else False
+        self.aug_reverse = False  ## Don't use this with supervised
 
     def __getitem__(self, idx):
         subj, start_idx = self.samples[idx]
         idcs = np.arange(start_idx, start_idx + self.frames_per_clip, dtype=int)
-        clip = self.data[subj]['video'][idcs] # [T,H,W,C]
-        clip = transforms.prepare_clip(clip, self.channels) # [C,T,H,W]
+        clip = self.data[subj]["video"][idcs]  # [T,H,W,C]
+        clip = transforms.prepare_clip(clip, self.channels)  # [C,T,H,W]
         clip, speed_idcs, speed = self.apply_transformations(clip, subj, idcs)
         if speed != 1.0:
             min_idx = int(speed_idcs[0])
-            max_idx = int(speed_idcs[-1])+1
+            max_idx = int(speed_idcs[-1]) + 1
             orig_x = np.arange(min_idx, max_idx, dtype=int)
             orig_wave = self.waves[subj][orig_x]
             wave = np.interp(speed_idcs, orig_x, orig_wave)

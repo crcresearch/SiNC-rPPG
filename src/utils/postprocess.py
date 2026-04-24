@@ -8,13 +8,13 @@ def standardize(wave):
 
 
 def overlap_add(pred_arrs, fpc, step, normed=True, hanning=True):
-    plen = int(len(pred_arrs)*step + (fpc-step))
+    plen = int(len(pred_arrs) * step + (fpc - step))
     oadd_arr = np.zeros(plen)
     hanning_window = np.hanning(fpc)
     for j, subj_win in enumerate(pred_arrs):
         ## Define the location of the packet
-        start = int(j*step)
-        end = start+fpc
+        start = int(j * step)
+        end = start + fpc
         ## Make packet centered at 0 and standardized
         if normed:
             if hanning:
@@ -44,10 +44,12 @@ def predict_HR(wave, fps=30, window_size=300, stride=1, maf_width=-1, pad_to_inp
 
 
 def smooth(HR, maf_width):
-    return np.convolve(np.pad(HR, maf_width//2, 'edge'), np.ones((maf_width))/maf_width, mode='valid')
+    return np.convolve(
+        np.pad(HR, maf_width // 2, "edge"), np.ones((maf_width)) / maf_width, mode="valid"
+    )
 
 
-def estimate_bpm(wave, fps=30, periodogram_window='hamming', nfft=5400, low_hz=0.66666, high_hz=3):
+def estimate_bpm(wave, fps=30, periodogram_window="hamming", nfft=5400, low_hz=0.66666, high_hz=3):
     window = signal.get_window(periodogram_window, wave.shape[0])
     freq, density = signal.periodogram(wave, window=window, fs=fps, nfft=nfft)
     idcs = np.where((freq >= low_hz) & (freq <= high_hz))[0]
@@ -59,9 +61,9 @@ def estimate_bpm(wave, fps=30, periodogram_window='hamming', nfft=5400, low_hz=0
 
 
 def resize_to_input(HRs, n, stride, window_size):
-    '''
-        Returns: signal expanded to size n
-    '''
+    """
+    Returns: signal expanded to size n
+    """
     HRs = np.asarray(HRs)
     HRs = np.repeat(HRs, stride)
     diff = n - HRs.shape[0]
@@ -72,11 +74,13 @@ def resize_to_input(HRs, n, stride, window_size):
     return HRs
 
 
-def sliding_bpm(sig, fps=30, window_size=300, stride=1, low_hz=0.66667, high_hz=3, nfft=5400, pad_to_input=False):
-    '''
-        Returns: Heart rate prediction with the same size as
-                 the input signal.
-    '''
+def sliding_bpm(
+    sig, fps=30, window_size=300, stride=1, low_hz=0.66667, high_hz=3, nfft=5400, pad_to_input=False
+):
+    """
+    Returns: Heart rate prediction with the same size as
+             the input signal.
+    """
     window_size = int(window_size)
     n = sig.shape[0]
     window_count = ((n - window_size) / stride) + 1
@@ -92,11 +96,6 @@ def sliding_bpm(sig, fps=30, window_size=300, stride=1, low_hz=0.66667, high_hz=
 
     if pad_to_input:
         HRs = resize_to_input(HRs, n, stride, window_size)
-        assert(HRs.shape[0] == sig.shape[0])
+        assert HRs.shape[0] == sig.shape[0]
 
     return HRs
-
-
-if __name__ == '__main__':
-    main()
-

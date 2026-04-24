@@ -1,0 +1,3 @@
+model_type: rpnet
+channels: rgb
+dropout: 0.5

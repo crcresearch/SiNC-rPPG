@@ -1,20 +1,14 @@
 import sys
 
+from datasets.dataset_registry import DATASET_REGISTRY
+
+
 def get_dataset(split, arg_obj):
-    dataset = arg_obj.dataset.lower()
-
-    if dataset == 'pure_unsupervised':
-        from datasets.PURE_unsupervised import PUREUnsupervised as DataSet
-        print('Using PURE unsupervised dataset.')
-    elif dataset == 'pure_supervised':
-        from datasets.PURE_supervised import PURESupervised as DataSet
-        print('Using PURE supervised dataset.')
-    elif dataset == 'pure_testing':
-        from datasets.PURE_testing import PURESupervised as DataSet
-        print('Using PURE testing dataset.')
-
-    else:
-        print('Dataset not found. Exiting.')
+    key = arg_obj.dataset.lower()
+    try:
+        cls = DATASET_REGISTRY.get(key)
+    except KeyError:
+        print("Dataset not found:", key, "Exiting.")
         sys.exit(-1)
-
-    return DataSet(split, arg_obj)
+    print(f"Using dataset class {cls.__name__} ({key}).")
+    return cls(split, arg_obj)

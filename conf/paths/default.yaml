@@ -1,0 +1,7 @@
+# All paths are relative to the repository root unless absolute.
+raw_dir: data/raw
+preprocessed_dir: data/preprocessed
+metadata_dir: data/metadata
+experiments_dir: experiments
+predictions_dir: predictions
+results_dir: results
