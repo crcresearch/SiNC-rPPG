@@ -168,7 +168,13 @@ You should see merged YAML including `dataset.fps`, `training.epochs`, `paths.me
 
 ### Step E — Train (single fold or full K-fold)
 
+**Quick difference:**
+- `scripts/run_experiments.py train`: wrapper that runs one `train.py` subprocess per fold in a K range (K-fold) (`--k-min` to `--k-max`). It also supports a single-fold run by setting `--k-min=0 --k-max=0`, and forwarded Hydra overrides via --.
+- `train.py` directly: same training logic, one fold/run per invocation, called manually (typically from `src/`).
+
 **Recommended:** Run [`scripts/run_experiments.py`](scripts/run_experiments.py) from the **repository root** (the folder that contains `scripts/` and `src/`), using the `train` subcommand in the examples below. For each fold index `K`, the script starts a separate training process that runs **`train.py`** with Hydra arguments such as `experiment_root=...`, `K=...`, and `dataset=...`. That process is launched with **working directory `src/`** (so the same layout as in the README: `cd src` then `python train.py ...`). You do not need to `cd src` yourself when using this runner.
+
+If you want to pass extra Hydra overrides (for example `training.epochs`, `training.batch_size`, `training.lr`) through this runner, place them after `--`. They are forwarded unchanged to each `train.py` subprocess in the K-fold loop.
 
 Train **all default folds** (`K=0` through `K=14`, matching the original paper-style protocol):
 
@@ -188,6 +194,12 @@ Optional dataset flag (must match a registered Hydra dataset group / registry na
 uv run python scripts/run_experiments.py train --experiment-root experiments/PURE_exper --dataset pure_unsupervised
 ```
 
+Forward additional Hydra overrides to `train.py`:
+
+```bash
+uv run python scripts/run_experiments.py train --experiment-root experiments/PURE_smoke --k-min 0 --k-max 0 -- training.epochs=5 training.batch_size=8 training.lr=3e-4
+```
+
 **What gets created**: under `experiments/...` you will see per-fold directories (names depend on training seeds and fold index), checkpoints, TensorBoard logs under `runs/`, `checkpoints_manifest.jsonl`, and `training_summary.json` (see [README.md](README.md)).
 
 **Alternative (manual Hydra)**: from `src/`:
@@ -201,10 +213,20 @@ You must pass a valid **`experiment_root`** for the standard K-fold + evaluation
 
 ### Step F — Evaluate (test)
 
+**Quick difference:**
+- `scripts/run_experiments.py test`: wrapper that runs one `test.py` process for a completed `experiment_root` from the repo root.
+- `test.py` directly: same evaluation logic, but called manually from `src/`.
+
 After at least one fold has finished and checkpoints exist:
 
 ```bash
 uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_exper
+```
+
+You can also forward Hydra overrides to `test.py` after `--`:
+
+```bash
+uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_exper -- paths.results_dir=results_alt paths.predictions_dir=predictions_alt window_size=12
 ```
 
 Evaluation discovers fold subdirectories under `experiment_root`, reads each fold’s saved `arg_obj.txt`, loads the corresponding checkpoint, and runs the test loop. Default internal testing dataset list includes **`pure_testing`** (see [src/engine/evaluation.py](src/engine/evaluation.py)).
@@ -226,6 +248,28 @@ Hydra composes [conf/config.yaml](conf/config.yaml) from groups under `conf/`. C
 | Train on PURE, validate on another corpus | `validation_dataset=ubfc_unsupervised`, `validation_fps=30` |
 
 Registered dataset **names** (for `dataset=...` and `validation_dataset=...`) are defined in [src/datasets/dataset_registry.py](src/datasets/dataset_registry.py).
+
+### Quick override templates (copy/paste)
+
+Use these as starting points and replace values as needed.
+
+```bash
+# train.py directly (single fold, full Hydra flexibility)
+cd src
+uv run python train.py experiment_root=/absolute/path/to/experiments/PURE_manual K=0 training.epochs=5 training.batch_size=8 training.lr=3e-4
+
+# run_experiments.py train (K-fold wrapper) + forwarded Hydra overrides after `--`
+cd ..
+uv run python scripts/run_experiments.py train --experiment-root experiments/PURE_smoke --k-min 0 --k-max 0 -- training.epochs=5 training.batch_size=8 training.lr=3e-4
+
+# run_experiments.py test + forwarded Hydra overrides after `--`
+uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_smoke -- paths.results_dir=results_smoke paths.predictions_dir=predictions_smoke window_size=12
+```
+
+Notes:
+- For `run_experiments.py`, put extra Hydra overrides **after `--`** so argparse does not try to parse them.
+- The same forwarded overrides are applied to every fold in the K-loop.
+- Some `test.py` keys are overwritten from each fold's saved `arg_obj.txt` during evaluation (for example `K`, `fps`, `fpc`, `step`, `model_type`, and internal test dataset selection), so path/output-related overrides are usually the most useful there.
 
 ---
 

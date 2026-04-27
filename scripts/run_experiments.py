@@ -7,6 +7,8 @@ Run from the repository root, for example:
   uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_exper
 
 Training/test subprocesses invoke Hydra (e.g. ``experiment_root=...``, ``K=...``, ``dataset=...``).
+You can pass additional Hydra overrides after ``--`` and they are forwarded unchanged
+to ``train.py`` / ``test.py``.
 """
 
 from __future__ import annotations
@@ -32,12 +34,21 @@ def _resolve_experiment_root(path_str: str) -> Path:
     return p
 
 
+def _forwarded_hydra_overrides(args: argparse.Namespace) -> list[str]:
+    """Return extra Hydra CLI tokens collected after ``--``."""
+    raw = list(getattr(args, "hydra_overrides", []) or [])
+    if raw and raw[0] == "--":
+        raw = raw[1:]
+    return raw
+
+
 def _run_train(args: argparse.Namespace) -> int:
     src = _src_dir()
     root = _resolve_experiment_root(args.experiment_root)
     dataset = args.dataset
     k_min = args.k_min
     k_max = args.k_max
+    hydra_overrides = _forwarded_hydra_overrides(args)
     for k in range(k_min, k_max + 1):
         cmd = [
             sys.executable,
@@ -46,6 +57,7 @@ def _run_train(args: argparse.Namespace) -> int:
             f"K={k}",
             f"dataset={dataset}",
         ]
+        cmd.extend(hydra_overrides)
         print("Running:", " ".join(cmd), f"(cwd={src})", flush=True)
         r = subprocess.run(cmd, cwd=src, check=False)
         if r.returncode != 0:
@@ -61,6 +73,7 @@ def _run_test(args: argparse.Namespace) -> int:
         "test.py",
         f"experiment_root={root}",
     ]
+    cmd.extend(_forwarded_hydra_overrides(args))
     print("Running:", " ".join(cmd), f"(cwd={src})", flush=True)
     return subprocess.run(cmd, cwd=src, check=False).returncode
 
@@ -84,6 +97,11 @@ def main() -> int:
     )
     p_train.add_argument("--k-min", type=int, default=0, help="Minimum fold index K (inclusive).")
     p_train.add_argument("--k-max", type=int, default=14, help="Maximum fold index K (inclusive).")
+    p_train.add_argument(
+        "hydra_overrides",
+        nargs=argparse.REMAINDER,
+        help="Extra Hydra overrides forwarded to train.py; place after '--'.",
+    )
     p_train.set_defaults(_runner=_run_train)
 
     p_test = sub.add_parser("test", help="Run test.py on a completed experiment root.")
@@ -91,6 +109,11 @@ def main() -> int:
         "--experiment-root",
         default="experiments/PURE_exper",
         help="Directory under repo root (or absolute) containing fold_* subdirectories.",
+    )
+    p_test.add_argument(
+        "hydra_overrides",
+        nargs=argparse.REMAINDER,
+        help="Extra Hydra overrides forwarded to test.py; place after '--'.",
     )
     p_test.set_defaults(_runner=_run_test)
 

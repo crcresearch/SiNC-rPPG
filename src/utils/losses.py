@@ -348,7 +348,8 @@ def torch_power_spectral_density(
     rfft_out = fft.rfft(centered, n=nfft, dim=1)
     psd = torch.abs(rfft_out) ** 2
     N = psd.shape[1]
-    freqs = fft.rfftfreq(2 * N - 1, 1 / fps)
+    # Match input device (e.g. MPS/CUDA); plain rfftfreq defaults to CPU and breaks advanced indexing with argmax on psd.
+    freqs = fft.rfftfreq(2 * N - 1, d=1.0 / float(fps), device=x.device, dtype=x.dtype)
     if return_angle:
         angle = torch.angle(rfft_out)
         if not radians:

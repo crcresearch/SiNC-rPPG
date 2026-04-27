@@ -85,7 +85,14 @@ uv run python test.py experiment_root=/path/to/experiments
 | Paths relative to **repo root** (see `conf/paths/default.yaml`) | `paths.metadata_dir=data/metadata`, `paths.preprocessed_dir=/scratch/rppg/preprocessed` |
 | Add a key not in YAML (use sparingly) | `+some_new_flag=1` (see [Hydra docs](https://hydra.cc/docs/advanced/override_grammar/basic/) for `+` vs `++`) |
 
-**Notes:** Run `train.py` / `test.py` from `src/` (as in the examples above) so `config_path="../conf"` resolves correctly. `scripts/run_experiments.py` already sets `cwd=src` and passes overrides like `experiment_root=...` and `dataset=...`. Override values with spaces may need quoting in your shell.
+**Notes:** Run `train.py` / `test.py` from `src/` (as in the examples above) so `config_path="../conf"` resolves correctly. `scripts/run_experiments.py` sets `cwd=src` and passes `experiment_root=...` (plus `K=...`, `dataset=...` for `train`). To forward additional Hydra overrides through `run_experiments.py`, place them after `--`, for example:
+
+```bash
+uv run python scripts/run_experiments.py train --experiment-root experiments/PURE_smoke --k-min 0 --k-max 0 -- training.epochs=5 training.batch_size=8 training.lr=3e-4
+uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_smoke -- paths.results_dir=results_smoke paths.predictions_dir=predictions_smoke
+```
+
+Override values with spaces may need quoting in your shell.
 
 ### Where training writes files (`experiment_root`)
 
@@ -123,6 +130,10 @@ See [data/README.md](data/README.md). By default, CSV metadata is read from `dat
 
 ## To run
 
+**Which command should I use?**
+- `scripts/run_experiments.py train|test`: convenient wrapper from repo root; `train` loops over a K range (K-fold) and launches one `train.py` process per fold, while `test` runs `test.py` once over a completed experiment root. It also supports a single-fold run with `--k-min=0 --k-max=0`, and forwarded Hydra overrides via --.
+- `src/train.py` / `src/test.py`: single-fold run invocation (one K at a time), useful when you want direct one-off control/debugging without the wrapper loop. Called manually,  typically from `src/`.
+
 1. To prepare the data for training, [download PURE](https://www.tu-ilmenau.de/en/university/departments/department-of-computer-science-and-automation/profile/institutes-and-groups/institute-of-computer-and-systems-engineering/group-for-neuroinformatics-and-cognitive-robotics/data-sets-code/pulse-rate-detection-dataset-pure) and follow the steps in `src/preprocessing/PURE`.
 
 2. Train K folds (default K = 0..14, same as the original shell script) from the repo root:
@@ -133,10 +144,22 @@ uv run python scripts/run_experiments.py train --experiment-root experiments/PUR
 
 Optional flags: `--dataset pure_unsupervised`, `--k-min`, `--k-max`.
 
+Additional Hydra overrides can be forwarded to `train.py` after `--`, for example:
+
+```bash
+uv run python scripts/run_experiments.py train --experiment-root experiments/PURE_exper -- training.epochs=50 training.batch_size=16 training.use_lightning=true
+```
+
 3. Evaluate saved experiments:
 
 ```bash
 uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_exper
+```
+
+You can also forward Hydra overrides to `test.py` after `--`, for example:
+
+```bash
+uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_exper -- paths.results_dir=results_alt paths.predictions_dir=predictions_alt window_size=12
 ```
 
 ## Development
