@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections.abc
 import pickle
 from pathlib import Path
 
@@ -12,6 +13,23 @@ import torch.nn as nn
 from datasets.utils import get_dataset
 from utils import validate as validate_utils
 from utils.model_selector import select_model
+from utils.validate import flatten_ragged_object_1d
+
+
+def _resolve_testing_datasets(arg_obj) -> list[str]:
+    """Which supervised test dataset keys to evaluate (registry names)."""
+    raw = getattr(arg_obj, "testing_datasets", None)
+    if (
+        isinstance(raw, collections.abc.Sequence)
+        and not isinstance(raw, (str, bytes))
+        and len(raw) > 0
+    ):
+        out = [str(x).strip() for x in raw if str(x).strip()]
+        return out if out else ["pure_testing"]
+    single = getattr(arg_obj, "testing_dataset", None)
+    if single is not None and str(single).strip() and str(single).lower() not in ("null", "none"):
+        return [str(single).strip()]
+    return ["pure_testing"]
 
 
 def parse_log(experiment_dir: Path) -> dict:
@@ -39,7 +57,8 @@ def run_evaluation(arg_obj, device: torch.device) -> None:
     output_path = prediction_dir / (experiment_root.name + ".pkl")
     log_path = log_dir / (experiment_root.name + ".txt")
 
-    testing_datasets = ["pure_testing"]
+    testing_datasets = _resolve_testing_datasets(arg_obj)
+    print("Testing dataset registry key(s):", testing_datasets)
     fold_dirs = sorted([p.name for p in experiment_root.iterdir() if p.is_dir()])
 
     if load_pickle:
@@ -91,7 +110,7 @@ def run_evaluation(arg_obj, device: torch.device) -> None:
                 save_tag = model_tag + f"_{test_split}"
                 print("best_model_path, save_tag:", model_path, save_tag)
 
-                checkpoint = torch.load(model_path, map_location=device)
+                checkpoint = torch.load(model_path, map_location=device, weights_only=False)
                 model.load_state_dict(checkpoint["model_state_dict"])
                 model = model.float().to(device)
                 model.eval()
@@ -131,19 +150,37 @@ def run_evaluation(arg_obj, device: torch.device) -> None:
         exper_errors = {"ME": [], "MAE": [], "RMSE": [], "r": []}
         for seed in exper.keys():
             single_exper = exper[seed]
-            pred_waves = []
-            gt_waves = []
-            pred_HRs = []
-            gt_HRs = []
-            for fold in single_exper.keys():
-                pred_waves.append(single_exper[fold]["pred_waves"])
-                gt_waves.append(single_exper[fold]["gt_waves"])
-                pred_HRs.append(single_exper[fold]["pred_HRs"])
-                gt_HRs.append(single_exper[fold]["gt_HRs"])
-            pred_waves = np.hstack(pred_waves)
-            gt_waves = np.hstack(gt_waves)
-            pred_HRs = np.hstack(pred_HRs)
-            gt_HRs = np.hstack(gt_HRs)
+            fold_keys_sorted = sorted(
+                single_exper.keys(), key=lambda k: int(k) if str(k).isdigit() else k
+            )
+            pred_waves = np.concatenate(
+                [
+                    flatten_ragged_object_1d(single_exper[fold]["pred_waves"])
+                    for fold in fold_keys_sorted
+                ],
+                axis=0,
+            )
+            gt_waves = np.concatenate(
+                [
+                    flatten_ragged_object_1d(single_exper[fold]["gt_waves"])
+                    for fold in fold_keys_sorted
+                ],
+                axis=0,
+            )
+            pred_HRs = np.concatenate(
+                [
+                    flatten_ragged_object_1d(single_exper[fold]["pred_HRs"])
+                    for fold in fold_keys_sorted
+                ],
+                axis=0,
+            )
+            gt_HRs = np.concatenate(
+                [
+                    flatten_ragged_object_1d(single_exper[fold]["gt_HRs"])
+                    for fold in fold_keys_sorted
+                ],
+                axis=0,
+            )
             ME_HR, MAE_HR, RMSE_HR, r_HR, r_wave = validate_utils.evaluate_predictions(
                 pred_waves, pred_HRs, gt_waves, gt_HRs
             )

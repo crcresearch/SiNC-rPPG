@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 
 import datasets.transforms as transforms
@@ -7,6 +9,13 @@ from datasets.PURE import PURE
 class PUREUnsupervised(PURE):
     def __init__(self, split, arg_obj):
         super().__init__(split, arg_obj)
+
+    def _register_subject_wave(self, d: dict, npz_path: Path) -> None:
+        if "wave" in d:
+            self.waves.append(d["wave"])
+        else:
+            T = int(d["video"].shape[0])
+            self.waves.append(np.zeros(T, dtype=np.float32))
 
     def set_augmentations(self):
         self.aug_flip = False

@@ -10,6 +10,25 @@ from tqdm import tqdm
 from utils.postprocess import overlap_add, predict_HR
 
 
+def flatten_ragged_object_1d(arr):
+    """Concatenate per-subject 1D float arrays (list/tuple or 1D ``dtype=object`` ndarray) into one vector."""
+    if arr is None:
+        return np.array([], dtype=np.float64)
+    if isinstance(arr, (list, tuple)):
+        if len(arr) == 0:
+            return np.array([], dtype=np.float64)
+        return np.concatenate([np.asarray(x, dtype=np.float64).ravel() for x in arr], axis=0)
+    if not isinstance(arr, np.ndarray):
+        return np.asarray(arr, dtype=np.float64).ravel()
+    if arr.size == 0:
+        return np.array([], dtype=np.float64)
+    if arr.dtype == object and arr.ndim >= 1:
+        return np.concatenate(
+            [np.asarray(x, dtype=np.float64).ravel() for x in arr.ravel()], axis=0
+        )
+    return np.asarray(arr, dtype=np.float64).ravel()
+
+
 def partition_by_subject(pred_waves, subjs):
     pred_arrs = []
     unique_subj = np.unique(subjs)
@@ -192,10 +211,10 @@ def infer_over_dataset_testing(model, val_set, criterion, device, arg_obj, norme
 
 
 def evaluate_predictions(pred_waves, pred_HRs, gt_waves, gt_HRs):
-    flat_pred_waves = np.hstack((pred_waves))
-    flat_pred_HRs = np.hstack((pred_HRs))
-    flat_gt_waves = np.hstack((gt_waves))
-    flat_gt_HRs = np.hstack((gt_HRs))
+    flat_pred_waves = flatten_ragged_object_1d(pred_waves)
+    flat_pred_HRs = flatten_ragged_object_1d(pred_HRs)
+    flat_gt_waves = flatten_ragged_object_1d(gt_waves)
+    flat_gt_HRs = flatten_ragged_object_1d(gt_HRs)
     ME_HR = np.mean(flat_gt_HRs - flat_pred_HRs)
     MAE_HR = np.mean(np.abs(flat_gt_HRs - flat_pred_HRs))
     RMSE_HR = np.sqrt(np.mean(np.square(flat_gt_HRs - flat_pred_HRs)))

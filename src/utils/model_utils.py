@@ -22,6 +22,6 @@ def get_best_loss(best_save_root):
         print("Zero or more than one best model when trying to load best model. Exiting.")
         sys.exit(-1)
     checkpoint_path = best_save_root / model_files[0]
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
     best_loss = checkpoint["loss"]["total"]
     return float(best_loss.item()) if hasattr(best_loss, "item") else float(best_loss)

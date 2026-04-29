@@ -66,7 +66,7 @@ class SiNCLightningModule(L.LightningModule):
         if bool(arg_obj.continue_training):
             ckpt, _ = model_utils.get_last_checkpoint(str(self.save_root))
             if ckpt is not None and Path(ckpt).is_file():
-                d = torch.load(ckpt, map_location="cpu")
+                d = torch.load(ckpt, map_location="cpu", weights_only=False)
                 self.model.load_state_dict(d["model_state_dict"])
                 print(f"Lightning: loaded model weights from {ckpt} (optimizer not restored).")
 

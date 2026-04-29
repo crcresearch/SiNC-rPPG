@@ -10,7 +10,7 @@ If you only need a short reference, see [README.md](README.md).
 
 - **Preprocessing** turns raw PURE videos into small **`.npz`** clips (cropped faces, fixed resolution) and builds a **CSV metadata** file listing every clip.
 - **Training** reads that CSV, loads clips for a given **fold** `K`, optimizes the SiNC losses, saves **checkpoints** under an **experiment root** (see [section 5](#5-experiment-root-and-outputs)), and optionally logs to **TensorBoard**.
-- **Testing** (`test.py`) loads checkpoints from each completed fold under the same experiment root and runs evaluation on a **supervised test** dataset configuration (for PURE, the code uses `pure_testing` internally).
+- **Testing** (`test.py`) loads checkpoints from each completed fold under the same experiment root and runs evaluation on a **supervised test** loader from the registry (default **`pure_testing`**; override with **`testing_dataset`** / **`testing_datasets`** in Hydra—see [Step F](#step-f--evaluate-test)).
 
 You do **not** need to understand every loss name on day one; follow the pipeline once end-to-end, then explore [README.md](README.md) and `conf/` for deeper changes.
 
@@ -24,7 +24,7 @@ A **registry** is a small lookup table: a **string name** you put in config (oft
 * **[`src/datasets/dataset_registry.py`](src/datasets/dataset_registry.py)** registers dataset modes such as `pure_unsupervised` → `PUREUnsupervised`, `pure_testing` → the PURE supervised test loader, and UBFC equivalents. When you set `dataset=pure_unsupervised` on the command line or in YAML, the dataloader code resolves that string through this registry instead of using a long chain of `if` / `elif` statements.
 * **[`src/utils/model_registry.py`](src/utils/model_registry.py)** does the same for networks, for example `physnet` → `PhysNet`, `rpnet` → `RPNet`, matching `model=...` in Hydra.
 
-**As a user**, you usually only choose among the **already registered** names in `conf/dataset/` and `conf/model/`; those names line up with the keys in the registries.
+**As a user**, you usually only choose among the **already registered** names in `conf/dataset/` and `conf/model/`; those names line up with the keys in the registries. Presets for **PURE** and **UBFC** live under `conf/dataset/` (for example `pure_unsupervised.yaml` and `ubfc_unsupervised.yaml`).
 
 **To add a new dataset or model**, you implement the class, then add one `.register("your_key", YourClass)` line in the appropriate registry module (and add a matching Hydra config file under `conf/dataset/` or `conf/model/`). See also [README.md](README.md) under **Notes** for registering new dataloaders.
 
@@ -63,6 +63,10 @@ uv sync --group dev
 | `src/preprocessing/PURE/` | Scripts to build PURE `.npz` clips and metadata. |
 
 More detail: [data/README.md](data/README.md).
+
+### Preprocessed `.npz` keys: `wave` vs supervised and unsupervised modes
+
+Each clip normally includes **`video`** (face crop stack) and often **`wave`** (oximeter waveform aligned in time). **Supervised** dataset modes (`pure_supervised`, `ubfc_supervised`, and **`pure_testing`** / other loaders that read `wave` for labels or metrics) **require** `wave` in every file; if it is missing, loading raises a **`ValueError`** with the file path. **Unsupervised** modes (`pure_unsupervised`, `ubfc_unsupervised`) need **`video`** for training; **`wave` may be omitted**, in which case clip boundaries follow **`video.shape[0]`** (a length-only placeholder is kept internally for indexing). Omitting `wave` does not replace ground truth where supervised evaluation or `test.py` metrics expect it—you still need real `wave` data on those paths.
 
 ---
 
@@ -192,6 +196,7 @@ Optional dataset flag (must match a registered Hydra dataset group / registry na
 
 ```bash
 uv run python scripts/run_experiments.py train --experiment-root experiments/PURE_exper --dataset pure_unsupervised
+uv run python scripts/run_experiments.py train --experiment-root experiments/UBFC_exper --dataset ubfc_unsupervised
 ```
 
 Forward additional Hydra overrides to `train.py`:
@@ -229,7 +234,92 @@ You can also forward Hydra overrides to `test.py` after `--`:
 uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_exper -- paths.results_dir=results_alt paths.predictions_dir=predictions_alt window_size=12
 ```
 
-Evaluation discovers fold subdirectories under `experiment_root`, reads each fold’s saved `arg_obj.txt`, loads the corresponding checkpoint, and runs the test loop. Default internal testing dataset list includes **`pure_testing`** (see [src/engine/evaluation.py](src/engine/evaluation.py)).
+Evaluation discovers fold subdirectories under `experiment_root`, reads each fold’s saved `arg_obj.txt`, loads the corresponding checkpoint, and runs the test loop.
+
+**Which supervised test loader to use** is set in [conf/config.yaml](conf/config.yaml) and can be overridden on the CLI (it is **not** read from each fold’s `arg_obj.txt`).
+
+| Hydra key | Purpose |
+|-----------|--------|
+| **`testing_dataset`** | Single registry name, default `pure_testing` (e.g. `ubfc_testing` for UBFC metrics on UBFC held-out subjects). |
+| **`testing_datasets`** | Optional list; if set to a non-empty list, it **replaces** the single-key case and runs each test set in one `test.py` invocation (e.g. two corpora). |
+
+**Examples (repository root):**
+
+```bash
+# Default: same as before (pure_testing)
+uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_smoke
+
+# Same experiment root, but models were trained on UBFC: use ubfc_testing
+uv run python scripts/run_experiments.py test --experiment-root experiments/UBFC_smoke -- testing_dataset=ubfc_testing
+
+# Direct test.py (working directory must be src/ for Hydra config path, as in the rest of this doc)
+cd src
+uv run python test.py experiment_root=/absolute/path/to/experiments/UBFC_smoke testing_dataset=ubfc_testing
+cd ..
+
+# Run two test corpora in one process (quote for the shell as needed)
+uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_exper -- 'testing_datasets=[pure_testing,ubfc_testing]'
+```
+
+**Train on PURE (`pure_unsupervised`), then test on UBFC:** the **test** loader is chosen only by **`testing_dataset`**, not by the training `dataset=...` in the saved fold. So you can train on PURE, then run **`test.py` with `testing_dataset=ubfc_testing`** to score the checkpoint on **UBFC** waveforms and HR metrics, as long as **UBFC** is preprocessed and **`data/metadata/UBFC.csv`** (or the 90 fps variant) is available. `dataset.fps` for the test run should match your UBFC metadata (often `30`).
+
+```bash
+# Example: you trained with run_experiments train --dataset pure_unsupervised --experiment-root experiments/PURE_to_ubfc_test
+uv run python scripts/run_experiments.py test \
+  --experiment-root experiments/PURE_to_ubfc_test \
+  -- testing_dataset=ubfc_testing
+```
+
+**Split caveat ([`src/engine/evaluation.py`](src/engine/evaluation.py)):** the script picks **`test_split`** from the **train** vs **test** registry name prefix (e.g. `pure` vs `pure` → use the **`test`** subject group for that fold). If those prefixes **differ** (PURE train → **`ubfc_testing`**), it uses the **`all`** split for the testing dataset—i.e. **all** subjects listed in **`UBFC.csv`**, not the single-fold **test** bucket for UBFC. That still answers “test on UBFC data,” but it is **not** the same protocol as “UBFC test-fold-only for this `K`.” For that stricter setup, use matching corpus names (e.g. train with **`ubfc_unsupervised`**) or adjust evaluation logic.
+
+If UBFC (or PURE) data is not under the default `data/preprocessed` and `data/metadata` paths, add the same `paths.*` overrides you would for any `test.py` run, e.g. `paths.preprocessed_dir=...` and `paths.metadata_dir=...` after `--`.
+
+See [src/engine/evaluation.py](src/engine/evaluation.py) (`_resolve_testing_datasets`).
+
+### UBFC — same machinery, different dataset preset
+
+UBFC uses the **same** registry pattern as PURE (`ubfc_unsupervised`, `ubfc_supervised`, `ubfc_testing` in [src/datasets/dataset_registry.py](src/datasets/dataset_registry.py)). Matching Hydra presets mirror PURE:
+
+| Preset file | Typical use |
+|-------------|-------------|
+| [conf/dataset/ubfc_unsupervised.yaml](conf/dataset/ubfc_unsupervised.yaml) | Unsupervised training / validation |
+| [conf/dataset/ubfc_supervised.yaml](conf/dataset/ubfc_supervised.yaml) | Supervised training |
+| [conf/dataset/ubfc_testing.yaml](conf/dataset/ubfc_testing.yaml) | Supervised test-style loader; use with `test.py` via `testing_dataset=ubfc_testing` (or set in [conf/config.yaml](conf/config.yaml)). |
+
+**Paths:** put preprocessed clips under `data/preprocessed/UBFC/` and metadata at **`data/metadata/UBFC.csv`** for 30 fps (or **`UBFC_90fps.csv`** if you train at `dataset.fps=90`). Layout matches [data/README.md](data/README.md).
+
+**Preprocessing** (from [`src/preprocessing/UBFC-rPPG/README.md`](src/preprocessing/UBFC-rPPG/README.md)):
+
+```bash
+cd src/preprocessing/UBFC-rPPG
+uv run python make_dataset.py /path/to/downloaded/UBFC /path/to/data/preprocessed/UBFC
+uv run python make_metadata.py /path/to/data/preprocessed/UBFC ../../../data/metadata/UBFC.csv
+```
+
+**Training examples** (repository root; same flags as PURE, but select UBFC defaults):
+
+```bash
+# Single fold, UBFC unsupervised preset (fps/frame fields match PURE presets)
+uv run python scripts/run_experiments.py train \
+  --experiment-root experiments/UBFC_smoke \
+  --k-min 0 --k-max 0 \
+  -- dataset=ubfc_unsupervised
+
+# Explicit preset via Hydra composition (equivalent to overriding the `dataset` key)
+uv run python scripts/run_experiments.py train \
+  --experiment-root experiments/UBFC_smoke \
+  --k-min 0 --k-max 0 \
+  -- dataset=ubfc_supervised training.epochs=50
+```
+
+**Manual `train.py`** from `src/`:
+
+```bash
+cd src
+uv run python train.py experiment_root=/absolute/path/to/experiments/UBFC_manual K=0 dataset=ubfc_unsupervised
+```
+
+**Testing (`test.py`):** After UBFC training, pass **`testing_dataset=ubfc_testing`** (see [Step F](#step-f--evaluate-test)) so evaluation uses **`ubfc_testing`** instead of the default **`pure_testing`**. Cross-corpus validation during training is separate: you can still set `validation_dataset=ubfc_unsupervised` while training on PURE (see [section 7](#7-configuration-what-to-change-for-new-data-or-new-runs)).
 
 ---
 
@@ -246,8 +336,10 @@ Hydra composes [conf/config.yaml](conf/config.yaml) from groups under `conf/`. C
 | Metadata or preprocessed roots on another disk | `paths.metadata_dir=/scratch/metadata`, `paths.preprocessed_dir=/scratch/preprocessed` |
 | Optional PyTorch Lightning backend | `training.use_lightning=true` |
 | Train on PURE, validate on another corpus | `validation_dataset=ubfc_unsupervised`, `validation_fps=30` |
+| **`test.py`**: supervised evaluation corpus | `testing_dataset=pure_testing` (default), `testing_dataset=ubfc_testing`, or `testing_datasets=[pure_testing,ubfc_testing]` |
+| Train on PURE, then **test** on UBFC in one `test.py` run | `testing_dataset=ubfc_testing` (UBFC preprocessed + `UBFC.csv`; see [Step F](#step-f--evaluate-test) **split caveat** when train/test corpus prefixes differ) |
 
-Registered dataset **names** (for `dataset=...` and `validation_dataset=...`) are defined in [src/datasets/dataset_registry.py](src/datasets/dataset_registry.py).
+Registered dataset **names** (for `dataset=...`, `validation_dataset=...`, and **`testing_dataset`**) are defined in [src/datasets/dataset_registry.py](src/datasets/dataset_registry.py).
 
 ### Quick override templates (copy/paste)
 
@@ -264,12 +356,18 @@ uv run python scripts/run_experiments.py train --experiment-root experiments/PUR
 
 # run_experiments.py test + forwarded Hydra overrides after `--`
 uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_smoke -- paths.results_dir=results_smoke paths.predictions_dir=predictions_smoke window_size=12
+
+# run_experiments.py test — UBFC supervised metrics on UBFC held-out split
+uv run python scripts/run_experiments.py test --experiment-root experiments/UBFC_smoke -- testing_dataset=ubfc_testing
+
+# UBFC unsupervised smoke (same pattern as PURE; needs UBFC.csv + preprocessed UBFC)
+uv run python scripts/run_experiments.py train --experiment-root experiments/UBFC_smoke --k-min 0 --k-max 0 -- dataset=ubfc_unsupervised
 ```
 
 Notes:
 - For `run_experiments.py`, put extra Hydra overrides **after `--`** so argparse does not try to parse them.
 - The same forwarded overrides are applied to every fold in the K-loop.
-- Some `test.py` keys are overwritten from each fold's saved `arg_obj.txt` during evaluation (for example `K`, `fps`, `fpc`, `step`, `model_type`, and internal test dataset selection), so path/output-related overrides are usually the most useful there.
+- Some `test.py` values are overwritten from each fold’s saved `arg_obj.txt` during evaluation (for example `K`, `fps`, `fpc`, `step`, `model_type`). The **supervised test loader** is chosen from your **Hydra** `testing_dataset` / `testing_datasets` (or [conf/config.yaml](conf/config.yaml) defaults), not from the fold’s training `dataset=...` string.
 
 ---
 
@@ -279,7 +377,7 @@ Notes:
 |--------|----------------|----------------|
 | **Training** | `train.py` / `Trainer` | Unsupervised (or supervised) **train** split for fold `K` |
 | **Validation** | Same run, validation split and losses | Held-out subjects within the training corpus, or another corpus if `validation_dataset` is set |
-| **Testing** | `test.py` / `run_evaluation` | Loads saved checkpoints; uses **`pure_testing`** (and similar patterns for other corpora) as coded in evaluation |
+| **Testing** | `test.py` / `run_evaluation` | Loads saved checkpoints; **default** `testing_dataset=pure_testing` (override to e.g. `ubfc_testing` in Hydra) |
 
 ---
 

@@ -12,6 +12,15 @@ from datasets.path_utils import preprocessed_subdir_for_dataset, resolve_npz_pat
 class PURE(BaseRPPGDataset, ABC):
     """PURE dataset: subject/session metadata and NPZ clips."""
 
+    def _register_subject_wave(self, d: dict, npz_path: Path) -> None:
+        """Append this subject's timeline to ``self.waves`` (length drives clip indexing)."""
+        path = str(npz_path)
+        if "wave" not in d:
+            raise ValueError(
+                f"NPZ missing required key 'wave' for PURE supervised/testing loaders: {path}"
+            )
+        self.waves.append(d["wave"])
+
     def load_data(self):
         meta_dir = Path(self.arg_obj.metadata_dir)
         if self.fps == 30:
@@ -52,7 +61,7 @@ class PURE(BaseRPPGDataset, ABC):
                 d["subj_id"] = subj_id
                 d["sess_id"] = sess_id
                 d["path"] = str(npz_path)
-                self.waves.append(d["wave"])
+                self._register_subject_wave(d, npz_path)
                 data.append(d)
         self.data = data
 

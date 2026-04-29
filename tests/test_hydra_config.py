@@ -14,6 +14,7 @@ def test_hydra_paths_resolve_to_repo_data():
     from config_merge import hydra_cfg_to_arg_namespace
 
     ns = hydra_cfg_to_arg_namespace(cfg)
+    assert getattr(ns, "testing_dataset", None) == "pure_testing"
     assert ns.metadata_dir.is_absolute()
     assert ns.metadata_dir.name == "metadata"
     assert (repo / "data" / "metadata").resolve() == ns.metadata_dir
