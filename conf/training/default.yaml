@@ -1,0 +1,30 @@
+losses: bsv
+validation_loss: bs
+bandwidth_loss: ipr
+sparsity_loss: snr
+variance_loss: emd
+supervised_loss: normnp
+supervised_scalar: 1.0
+bandwidth_scalar: 1.0
+sparsity_scalar: 1.0
+variance_scalar: 1.0
+optimization_step: unsupervised
+validation_step: unsupervised
+optimizer: adamw
+scheduler: 0
+lr: 0.0001
+augmentation: figscr
+speed_slow: 0.6
+speed_fast: 1.4
+batch_size: 20
+fpc: 120
+step: 60
+epochs: 200
+low_hz: 0.66666667
+high_hz: 3.0
+window_size: 10
+
+# Set true to use PyTorch Lightning (same checkpoint format as classic path).
+use_lightning: false
+# Clip global norm if > 0 (Lightning path only).
+lightning_gradient_clip: 0.0

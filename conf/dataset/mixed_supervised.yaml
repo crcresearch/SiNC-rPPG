@@ -1,0 +1,15 @@
+# Multi-corpus supervised training (PURE + UBFC). Target mixture via
+# WeightedRandomSampler; weights are expectations, not exact per-batch ratios.
+dataset: mixed_supervised
+fps: 30
+frame_width: 64
+frame_height: 64
+optimization_step: supervised
+validation_step: supervised
+losses: supervised
+validation_loss: supervised
+mixed_sub_datasets:
+  - dataset: pure_supervised
+    weight: 0.7
+  - dataset: ubfc_supervised
+    weight: 0.3

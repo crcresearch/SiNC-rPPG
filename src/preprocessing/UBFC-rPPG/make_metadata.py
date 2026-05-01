@@ -1,7 +1,8 @@
-import pandas as pd
 import argparse
-from natsort import natsorted
 import os
+
+import pandas as pd
+from natsort import natsorted
 
 
 def main(args):
@@ -21,8 +22,8 @@ def main(args):
         ids.append(subject_id)
 
     d = {}
-    d['id'] = ids
-    d['path'] = paths
+    d["id"] = ids
+    d["path"] = paths
 
     df = pd.DataFrame(d)
     df.to_csv(output_path, index=False)
@@ -31,9 +32,11 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('input',
-                        help='Path to the preprocessed output dataset directory with cropped faces.')
-    parser.add_argument('output',
-                        help='Path to the metadata csv which has paths to the preprocessed data.')
+    parser.add_argument(
+        "input", help="Path to the preprocessed output dataset directory with cropped faces."
+    )
+    parser.add_argument(
+        "output", help="Path to the metadata csv which has paths to the preprocessed data."
+    )
     args = parser.parse_args()
     main(args)

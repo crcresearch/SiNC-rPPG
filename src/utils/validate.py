@@ -1,12 +1,32 @@
-import torch
-import numpy as np
+from copy import deepcopy
+from pathlib import Path
+
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from scipy.stats import pearsonr
 from tqdm import tqdm
-from copy import deepcopy
-import os
 
 from utils.postprocess import overlap_add, predict_HR
+
+
+def flatten_ragged_object_1d(arr):
+    """Concatenate per-subject 1D float arrays (list/tuple or 1D ``dtype=object`` ndarray) into one vector."""
+    if arr is None:
+        return np.array([], dtype=np.float64)
+    if isinstance(arr, (list, tuple)):
+        if len(arr) == 0:
+            return np.array([], dtype=np.float64)
+        return np.concatenate([np.asarray(x, dtype=np.float64).ravel() for x in arr], axis=0)
+    if not isinstance(arr, np.ndarray):
+        return np.asarray(arr, dtype=np.float64).ravel()
+    if arr.size == 0:
+        return np.array([], dtype=np.float64)
+    if arr.dtype == object and arr.ndim >= 1:
+        return np.concatenate(
+            [np.asarray(x, dtype=np.float64).ravel() for x in arr.ravel()], axis=0
+        )
+    return np.asarray(arr, dtype=np.float64).ravel()
 
 
 def partition_by_subject(pred_waves, subjs):
@@ -34,13 +54,15 @@ def cut_wave_ends(pred_waves, gt_waves):
         pred_wave = pred_waves[i]
         gt_wave = gt_waves[i]
         if len(gt_wave) >= len(pred_wave):
-            gt_waves[i] = gt_wave[:len(pred_wave)]
+            gt_waves[i] = gt_wave[: len(pred_wave)]
         else:
-            pred_waves[i] = pred_wave[:len(gt_wave)]
+            pred_waves[i] = pred_wave[: len(gt_wave)]
     return pred_waves, gt_waves
 
 
-def predict_all_subjects_HRs(pred_waves, fps=30, window_size=300, stride=1, maf_width=-1, pad_to_input=False):
+def predict_all_subjects_HRs(
+    pred_waves, fps=30, window_size=300, stride=1, maf_width=-1, pad_to_input=False
+):
     HRs = []
     for wave in pred_waves:
         wave = wave.astype(float)
@@ -50,9 +72,11 @@ def predict_all_subjects_HRs(pred_waves, fps=30, window_size=300, stride=1, maf_
     return HRs
 
 
-def infer_over_dataset_training(model, val_set, optimization_step, criterion, device, arg_obj, experiment_dir, epoch):
+def infer_over_dataset_training(
+    model, val_set, optimization_step, criterion, device, arg_obj, experiment_dir, epoch
+):
     loader = torch.utils.data.DataLoader(val_set, batch_size=1, shuffle=False, num_workers=1)
-    all_losses = {'total': 0.0}
+    all_losses = {"total": 0.0}
     loader_iterator = iter(loader)
     iter_length = len(loader)
 
@@ -60,8 +84,8 @@ def infer_over_dataset_training(model, val_set, optimization_step, criterion, de
     if plot_psds:
         num_plots = int(arg_obj.num_psd_plots)
         plot_idcs = np.random.choice(np.arange(iter_length), num_plots, replace=False)
-        plot_dir = os.path.join(experiment_dir, 'psd_plots', str(epoch))
-        os.makedirs(plot_dir, exist_ok=True)
+        plot_dir = Path(experiment_dir) / "psd_plots" / str(epoch)
+        plot_dir.mkdir(parents=True, exist_ok=True)
         running_psd = None
         plot_i = 0
 
@@ -72,7 +96,9 @@ def infer_over_dataset_training(model, val_set, optimization_step, criterion, de
             loader_iterator = iter(loader)
             data = next(loader_iterator)
         with torch.set_grad_enabled(False):
-            losses_dict, wave, freq, psd = optimization_step(model, data, criterion, device, val_set.fps, arg_obj, return_pred=True)
+            losses_dict, wave, freq, psd = optimization_step(
+                model, data, criterion, device, val_set.fps, arg_obj, return_pred=True
+            )
             psd = psd[0].cpu().numpy()
             if plot_psds:
                 if running_psd is None:
@@ -81,20 +107,20 @@ def infer_over_dataset_training(model, val_set, optimization_step, criterion, de
                 if i in plot_idcs:
                     wave = wave[0].cpu().numpy()
                     freq = freq.cpu().numpy()
-                    fig, axs = plt.subplots(2, 1, figsize=(12,9))
+                    fig, axs = plt.subplots(2, 1, figsize=(12, 9))
                     axs[0].plot(wave)
-                    axs[0].set_xlabel('Frames')
-                    axs[0].set_ylabel('Waveform')
+                    axs[0].set_xlabel("Frames")
+                    axs[0].set_ylabel("Waveform")
                     axs[1].plot(freq, psd)
                     axs[1].set_xticks(np.arange(0, 15, 0.5), fontsize=8)
-                    axs[1].set_xlabel('Frequency (Hz)')
-                    axs[1].set_ylabel('Power')
+                    axs[1].set_xlabel("Frequency (Hz)")
+                    axs[1].set_ylabel("Power")
                     plt.tight_layout()
-                    plt.savefig(os.path.join(plot_dir, f'{plot_i}.jpg'), dpi=250)
+                    plt.savefig(plot_dir / f"{plot_i}.jpg", dpi=250)
                     plt.close()
                     plot_i += 1
             for k in losses_dict.keys():
-                if not k in all_losses:
+                if k not in all_losses:
                     all_losses[k] = 0.0
                 all_losses[k] = all_losses[k] + losses_dict[k]
 
@@ -103,17 +129,17 @@ def infer_over_dataset_training(model, val_set, optimization_step, criterion, de
         if not isinstance(freq, np.ndarray):
             freq = freq.cpu().numpy()
         running_psd = running_psd / np.sum(running_psd)
-        mu = np.sum(running_psd*freq)
-        sigma = np.sum((freq - mu)**2 * running_psd)
+        mu = np.sum(running_psd * freq)
+        sigma = np.sum((freq - mu) ** 2 * running_psd)
         plt.plot(freq, running_psd)
-        plt.axvline(x=mu, c='k')
-        plt.axvline(x=mu-sigma, c='k', linestyle='--')
-        plt.axvline(x=mu+sigma, c='k', linestyle='--')
+        plt.axvline(x=mu, c="k")
+        plt.axvline(x=mu - sigma, c="k", linestyle="--")
+        plt.axvline(x=mu + sigma, c="k", linestyle="--")
         plt.xticks(np.arange(0, 15, 0.5), rotation=90, fontsize=8)
-        plt.xlabel('Frequency (Hz)')
-        plt.ylabel('Power')
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Power")
         plt.tight_layout()
-        plt.savefig(os.path.join(plot_dir, f'sum.jpg'), dpi=250)
+        plt.savefig(plot_dir / "sum.jpg", dpi=250)
         plt.close()
     for k in all_losses.keys():
         all_losses[k] = all_losses[k].cpu().numpy() / iter_length
@@ -161,7 +187,9 @@ def infer_over_dataset_testing(model, val_set, criterion, device, arg_obj, norme
     subjs = np.hstack(subjs)
 
     pred_waves = partition_by_subject(pred_waves, subjs)
-    oadd_waves = overlap_add_all_subjects(pred_waves, arg_obj.fpc, arg_obj.step, normed=normed, hanning=True)
+    oadd_waves = overlap_add_all_subjects(
+        pred_waves, arg_obj.fpc, arg_obj.step, normed=normed, hanning=True
+    )
     masks = partition_by_subject(masks, subjs)
     masks = overlap_add_all_subjects(masks, arg_obj.fpc, arg_obj.step, normed=False, hanning=False)
     gt_waves = val_set.waves.copy()
@@ -172,25 +200,24 @@ def infer_over_dataset_testing(model, val_set, criterion, device, arg_obj, norme
         gt_waves[i] = gt_waves[i][masks[i]]
         oadd_waves[i] = oadd_waves[i][masks[i]]
     window_size = int(np.round(arg_obj.window_size * arg_obj.fps))
-    pred_HRs = predict_all_subjects_HRs(oadd_waves, fps=arg_obj.fps, window_size=window_size, maf_width=-1)
-    gt_HRs = predict_all_subjects_HRs(gt_waves, fps=arg_obj.fps, window_size=window_size, maf_width=-1)
+    pred_HRs = predict_all_subjects_HRs(
+        oadd_waves, fps=arg_obj.fps, window_size=window_size, maf_width=-1
+    )
+    gt_HRs = predict_all_subjects_HRs(
+        gt_waves, fps=arg_obj.fps, window_size=window_size, maf_width=-1
+    )
 
     return ave_loss, oadd_waves, pred_HRs, gt_waves, gt_HRs
 
 
 def evaluate_predictions(pred_waves, pred_HRs, gt_waves, gt_HRs):
-    flat_pred_waves = np.hstack((pred_waves))
-    flat_pred_HRs = np.hstack((pred_HRs))
-    flat_gt_waves = np.hstack((gt_waves))
-    flat_gt_HRs = np.hstack((gt_HRs))
+    flat_pred_waves = flatten_ragged_object_1d(pred_waves)
+    flat_pred_HRs = flatten_ragged_object_1d(pred_HRs)
+    flat_gt_waves = flatten_ragged_object_1d(gt_waves)
+    flat_gt_HRs = flatten_ragged_object_1d(gt_HRs)
     ME_HR = np.mean(flat_gt_HRs - flat_pred_HRs)
     MAE_HR = np.mean(np.abs(flat_gt_HRs - flat_pred_HRs))
     RMSE_HR = np.sqrt(np.mean(np.square(flat_gt_HRs - flat_pred_HRs)))
     r_HR, p_HR = pearsonr(flat_gt_HRs, flat_pred_HRs)
     r_wave, p_wave = pearsonr(flat_gt_waves, flat_pred_waves)
     return ME_HR, MAE_HR, RMSE_HR, r_HR, r_wave
-
-
-if __name__ == '__main__':
-    main()
-

@@ -93,7 +93,7 @@ Focus on documentation, setup, and truthful repository behavior.
 - Rewrite the top-level README with a clear quickstart, environment assumptions, preprocessing flow, train/eval examples, and output layout.
 - Add a minimal smoke-test workflow using the existing `--debug` path in [src/args.py](src/args.py).
 - Align docs with reality: document which datasets are truly supported now vs planned.
-- Replace placeholder shell scripts in [scripts/train_PURE.sh](scripts/train_PURE.sh) and [scripts/test_PURE.sh](scripts/test_PURE.sh) with documented examples and portable commands.
+- Use [scripts/run_experiments.py](scripts/run_experiments.py) as the portable train/test entry point (former `train_PURE.sh` / `test_PURE.sh` shell scripts removed).
 - Add repo metadata that makes collaboration easier: `LICENSE`, contribution notes, and environment/version guidance.
 
 ## Best-Fit End State

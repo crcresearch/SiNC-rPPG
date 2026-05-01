@@ -1,0 +1,29 @@
+defaults:
+  - model: physnet
+  - dataset: pure_unsupervised
+  - training: default
+  - paths: default
+  - _self_
+
+hydra:
+  job:
+    chdir: false
+
+experiment_root: null
+K: 0
+log_path: null
+debug: 0
+num_workers: 3
+continue_training: 0
+plot_validation_psds: 0
+num_psd_plots: 5
+
+# Cross-domain validation: set validation_dataset to a registry key (e.g. ubfc_unsupervised) to validate on another corpus.
+validation_dataset: null
+validation_fps: null
+
+# test.py / run_evaluation: supervised test loader registry key(s), e.g. pure_testing, ubfc_testing.
+# Override CLI: testing_dataset=ubfc_testing
+# Or pass a list (multiple runs in one invocation): testing_datasets=[pure_testing,ubfc_testing]
+testing_dataset: pure_testing
+testing_datasets: null

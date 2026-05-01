@@ -1,0 +1,4 @@
+dataset: ubfc_testing
+fps: 30
+frame_width: 64
+frame_height: 64

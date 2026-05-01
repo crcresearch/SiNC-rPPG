@@ -1,0 +1,3 @@
+model_type: physnet
+channels: rgb
+dropout: 0.5
