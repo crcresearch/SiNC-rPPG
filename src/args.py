@@ -11,6 +11,10 @@ from pathlib import Path
 def _format_val(val):
     if isinstance(val, Path):
         return str(val)
+    # Hydra merges e.g. mixed_sub_datasets as a list of dicts; str.format cannot apply
+    # alignment specs to list/dict directly.
+    if isinstance(val, (dict, list, tuple, set, frozenset)):
+        return repr(val)
     return val
 
 

@@ -12,7 +12,7 @@ import torch.optim as optim
 
 import args
 from datasets.cross_domain import is_cross_domain, validation_arg_obj
-from datasets.utils import get_dataset
+from datasets.utils import build_training_dataloader, get_dataset
 from engine.lightning_train import _use_lightning, run_lightning_training
 from utils import model_utils
 from utils import validate as validate_utils
@@ -71,9 +71,7 @@ class Trainer:
                 "| val dataset",
                 val_arg.dataset,
             )
-        train_loader = torch.utils.data.DataLoader(
-            train_set, batch_size=arg_obj.batch_size, shuffle=True, num_workers=arg_obj.num_workers
-        )
+        train_loader = build_training_dataloader(train_set, arg_obj)
 
         if _use_lightning(arg_obj):
             run_lightning_training(

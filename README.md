@@ -8,61 +8,48 @@
 
 <figure>
   <img src="./teaser.png" style="width:100%">
-  <figcaption>Figure 1: Overview of the SiNC framework for rPPG compared with traditional supervised and unsupervised learning. Supervised and contrastive losses use distance metrics to the ground truth or other samples. Our framework applies the loss directly to the prediction by shaping the frequency spectrum, and encouraging variance over a batch of inputs. Power outside of the bandlimits is penalized to learn invariances to irrelevant frequencies. Power within the bandlimits is encouraged to be sparsely distributed near the peak frequency.</figcaption>                                                                                                          </figure>
+  <figcaption>
+    Figure 1: Overview of the SiNC framework for rPPG compared with traditional supervised and unsupervised learning. Supervised and contrastive losses use distance metrics to the ground truth or other samples. Our framework applies the loss directly to the prediction by shaping the frequency spectrum, and encouraging variance over a batch of inputs. Power outside of the bandlimits is penalized to learn invariances to irrelevant frequencies. Power within the bandlimits is encouraged to be sparsely distributed near the peak frequency.
+  </figcaption>
+</figure>
 
 ## Contents
 
-* **New to the codebase?** See the step-by-step **[INSTRUCTIONS.md](INSTRUCTIONS.md)** (data layout, PURE preprocessing, train/test commands, **`experiment_root` and output layout**, [registries](INSTRUCTIONS.md#2-registries-names-and-python-classes), Hydra knobs, troubleshooting).
-* Preprocessing code for the PURE dataset is in src/preprocessing/PURE
-* Training code is in src/train.py
-* Testing code is in src/test.py
-* Hydra configuration is under [conf/](conf/) (model, dataset, training, paths); run logging helpers are in src/args.py
-* Training and evaluation orchestration live in [src/engine/](src/engine/) (`Trainer`, `run_evaluation`). **Registries** map short string names (for example `pure_unsupervised`, `physnet`) to dataset/model classes; see [INSTRUCTIONS.md §2](INSTRUCTIONS.md#2-registries-names-and-python-classes). Implementation: [src/utils/registry.py](src/utils/registry.py), [src/datasets/dataset_registry.py](src/datasets/dataset_registry.py), [src/utils/model_registry.py](src/utils/model_registry.py)
-* Default data layout is documented in [data/README.md](data/README.md)
-* Loss functions are in src/utils/losses.py
-* Model architectures are in src/models/
-* Dataloaders are in src/datasets/
-* Cross-platform experiment runner: [scripts/run_experiments.py](scripts/run_experiments.py)
-* TODO: preprocessing code for [UBFC-rPPG](https://sites.google.com/view/ybenezeth/ubfcrppg), [DDPM](https://cvrl.nd.edu/projects/data/#remote-pulse-detection-21), and [HKBU-MARs](https://rds.comp.hkbu.edu.hk/mars/).
+* **[INSTRUCTIONS.md](INSTRUCTIONS.md)** — Main guide: preprocessing, training and testing, **`experiment_root`**, [Hydra overrides](INSTRUCTIONS.md#hydra-override-cheat-sheet), [multi-dataset training](INSTRUCTIONS.md#multi-dataset-training-for-mixed-pure-and-ubfc), registries, troubleshooting.
+* **[docs/ADDING_A_DATASET.md](docs/ADDING_A_DATASET.md)** — Checklist for adding a new corpus (data paths, loader, registry, Hydra, when to touch core code).
+* **Repo layout:** [conf/](conf/) (Hydra), [src/train.py](src/train.py), [src/test.py](src/test.py), [src/engine/](src/engine/), [src/datasets/](src/datasets/); default data layout: [data/README.md](data/README.md).
+* **K-fold wrapper:** [scripts/run_experiments.py](scripts/run_experiments.py).
+* **TODO:** preprocessing for [UBFC-rPPG](https://sites.google.com/view/ybenezeth/ubfcrppg), [DDPM](https://cvrl.nd.edu/projects/data/#remote-pulse-detection-21), [HKBU-MARs](https://rds.comp.hkbu.edu.hk/mars/).
 
 ## Requirements
 
 * **Python 3.11+** (tested with 3.11.x)
-* This repository is managed with **[uv](https://docs.astral.sh/uv/)**; Conda is not required.
+* This repository is managed with **[uv](https://docs.astral.sh/uv/)**.
 
 ## Installation (recommended: uv)
 
-From the repository root, create or reuse a virtual environment and install the project plus dev tools:
+From the repository root:
 
 ```bash
 uv sync --group dev
 ```
 
-This installs runtime dependencies from [pyproject.toml](pyproject.toml), installs the package in editable mode, and adds `pytest` and `ruff` for development.
+This installs runtime dependencies from [pyproject.toml](pyproject.toml), editable package mode, and dev tools (`pytest`, `ruff`).
 
 ## Installation (pip and venv, without uv)
-
-If you do not use uv, create a virtual environment with the standard library so packages are isolated from your system Python:
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate   # Linux / macOS
-# .venv\Scripts\activate    # Windows cmd
 pip install -U pip
 pip install -e ".[dev]"
 ```
 
-Runtime-only install (no dev tools):
-
-```bash
-pip install -e .
-```
-
-You can also install pinned-style runtime libraries from [requirements.txt](requirements.txt) (`pip install -r requirements.txt`), then install dev tools manually (`pip install pytest ruff`) if you prefer not to use the `[dev]` extra.
+Runtime-only: `pip install -e .` or [requirements.txt](requirements.txt) plus `pytest` / `ruff` manually.
 
 ## Configuration (Hydra)
 
-Training and testing use [Hydra](https://hydra.cc/). Defaults live under [conf/config.yaml](conf/config.yaml) with groups `model`, `dataset`, `training`, and `paths`. Override from the CLI, for example:
+Training and testing use [Hydra](https://hydra.cc/) with defaults in [conf/config.yaml](conf/config.yaml) (`model`, `dataset`, `training`, `paths`). Run `train.py` / `test.py` from **`src/`** (or use `scripts/run_experiments.py`, which sets `cwd=src`).
 
 ```bash
 cd src
@@ -70,97 +57,29 @@ uv run python train.py experiment_root=/path/to/experiments K=0 training.epochs=
 uv run python test.py experiment_root=/path/to/experiments
 ```
 
-`hydra.job.chdir` is set to `false` so relative paths stay anchored to the process working directory when needed; metadata and preprocessed roots are resolved to **absolute paths under the repository root** via [src/repo_paths.py](src/repo_paths.py).
+**Details:** [Hydra override cheat sheet](INSTRUCTIONS.md#hydra-override-cheat-sheet), [`experiment_root` and outputs](INSTRUCTIONS.md#5-experiment-root-and-outputs), path resolution in [src/config_merge.py](src/config_merge.py) / [src/repo_paths.py](src/repo_paths.py).
 
-### Hydra cheat sheet
+## Running training and evaluation
 
-| Goal | Example |
-|------|---------|
-| Show composed config and overrides | `cd src && uv run python train.py --help` |
-| Print full resolved config and exit | `uv run python train.py --cfg job` |
-| Top-level run keys (flattened into `arg_obj`) | `experiment_root=...`, `K=3`, `debug=1`, `continue_training=1` |
-| Swap a **config group** (file under `conf/<group>/`) | `model=rpnet`, `dataset=pure_testing`, `training=default` |
-| Nested keys (YAML hierarchy) | `training.lr=3e-4`, `training.batch_size=16`, `dataset.fps=90`, `training.use_lightning=true`, `training.lightning_gradient_clip=1.0` |
-| Cross-domain validation (top-level) | `validation_dataset=ubfc_unsupervised`, `validation_fps=30` |
-| Paths relative to **repo root** (see `conf/paths/default.yaml`) | `paths.metadata_dir=data/metadata`, `paths.preprocessed_dir=/scratch/rppg/preprocessed` |
-| Add a key not in YAML (use sparingly) | `+some_new_flag=1` (see [Hydra docs](https://hydra.cc/docs/advanced/override_grammar/basic/) for `+` vs `++`) |
+1. **Data:** [Download PURE](https://www.tu-ilmenau.de/en/university/departments/department-of-computer-science-and-automation/profile/institutes-and-groups/institute-of-computer-and-systems-engineering/group-for-neuroinformatics-and-cognitive-robotics/data-sets-code/pulse-rate-detection-dataset-pure) and preprocess (see [INSTRUCTIONS.md](INSTRUCTIONS.md) and `src/preprocessing/PURE/`).
 
-**Notes:** Run `train.py` / `test.py` from `src/` (as in the examples above) so `config_path="../conf"` resolves correctly. `scripts/run_experiments.py` sets `cwd=src` and passes `experiment_root=...` (plus `K=...`, `dataset=...` for `train`). To forward additional Hydra overrides through `run_experiments.py`, place them after `--`, for example:
-
-```bash
-uv run python scripts/run_experiments.py train --experiment-root experiments/PURE_smoke --k-min 0 --k-max 0 -- training.epochs=5 training.batch_size=8 training.lr=3e-4
-uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_smoke -- paths.results_dir=results_smoke paths.predictions_dir=predictions_smoke
-```
-
-Override values with spaces may need quoting in your shell.
-
-### Where training writes files (`experiment_root`)
-
-In this repo, an **experiment** is a **named directory** that groups related training outputs—typically **one training job per cross-validation fold** `K`, all evaluated together. **`experiment_root`** is the **path to that parent directory** (for example `experiments/PURE_exper` under your clone). The trainer creates subfolders inside it, such as `fold0_seed0`, containing checkpoints, `arg_obj.txt`, TensorBoard logs, and manifests.
-
-[`scripts/run_experiments.py`](scripts/run_experiments.py) always passes `experiment_root` into Hydra. If you omit `--experiment-root`, the default is **`experiments/PURE_exper`** relative to the **repository root** (not the filesystem root `/`).
-
-If you call `train.py` with Hydra leaving `experiment_root` unset (`null` in [conf/config.yaml](conf/config.yaml)), the code falls back to auto-numbered folders under `paths.experiments_dir`; that path differs from the K-fold layout and affects how evaluation discovers runs. See **[Experiment root and outputs](INSTRUCTIONS.md#5-experiment-root-and-outputs)** in [INSTRUCTIONS.md](INSTRUCTIONS.md) for details.
-
-## Experiment tracking (TensorBoard and manifests)
-
-Training logs **per-loss scalars** under `train/loss/...` and validation under `val/loss/...`, plus **learning rate** as `train/lr`, in TensorBoard (`runs/` under the experiment directory). A one-time **flat config** snapshot is written as `config/flat_args` text in the same run.
-
-**Weights & Biases** ([wandb](https://wandb.ai)) is not integrated in this repository; both the default training loop and the optional Lightning path use TensorBoard and the manifest files below for run history.
-
-Each epoch appends a line to **`checkpoints_manifest.jsonl`** (epoch, checkpoint path, `val_loss` breakdown, `is_best`, trainer backend). When training finishes, **`training_summary.json`** records the best epoch, best checkpoint path, and best validation total.
-
-View logs:
-
-```bash
-tensorboard --logdir /path/to/experiment_dir/runs
-```
-
-**PyTorch Lightning (optional):** set `training.use_lightning=true` to run the same loss logic and **identical `torch.save` checkpoints** (compatible with `test.py`) via Lightning, with logs under `runs/lightning/`. Optional `training.lightning_gradient_clip` sets global-norm clipping when greater than zero.
-
-## Research extensions
-
-* **Face detectors (preprocessing):** [src/preprocessing/face_detector.py](src/preprocessing/face_detector.py) defines a `FaceDetector` ABC plus `get_face_detector(name)`. `mediapipe` is implemented; `retinaface` and `mtcnn` are stubs raising `NotImplementedError`. PURE and UBFC `make_dataset.py` accept `--detector` (default `mediapipe`). Shared landmark indexing lives in [src/preprocessing/mesh_common.py](src/preprocessing/mesh_common.py).
-* **Signal metrics:** [src/utils/metrics.py](src/utils/metrics.py) provides `mean_absolute_error` and `snr_db` for NumPy or Torch tensors.
-* **Cross-domain validation:** Top-level Hydra keys `validation_dataset` and optional `validation_fps` (see [conf/config.yaml](conf/config.yaml)) select a **different** registered dataset for the validation split only (e.g. train on PURE, validate on UBFC). Example: `validation_dataset=ubfc_unsupervised` with `dataset=pure_unsupervised`.
-
-## Data layout
-
-See [data/README.md](data/README.md). By default, CSV metadata is read from `data/metadata/` and `.npz` clips from `data/preprocessed/<PURE|UBFC|...>/`. Existing CSVs that store absolute `path` values continue to work; otherwise filenames are resolved under `data/preprocessed/<Dataset>/`.
-
-## To run
-
-**Which command should I use?**
-- `scripts/run_experiments.py train|test`: convenient wrapper from repo root; `train` loops over a K range (K-fold) and launches one `train.py` process per fold, while `test` runs `test.py` once over a completed experiment root. It also supports a single-fold run with `--k-min=0 --k-max=0`, and forwarded Hydra overrides via --.
-- `src/train.py` / `src/test.py`: single-fold run invocation (one K at a time), useful when you want direct one-off control/debugging without the wrapper loop. Called manually,  typically from `src/`.
-
-1. To prepare the data for training, [download PURE](https://www.tu-ilmenau.de/en/university/departments/department-of-computer-science-and-automation/profile/institutes-and-groups/institute-of-computer-and-systems-engineering/group-for-neuroinformatics-and-cognitive-robotics/data-sets-code/pulse-rate-detection-dataset-pure) and follow the steps in `src/preprocessing/PURE`.
-
-2. Train K folds (default K = 0..14, same as the original shell script) from the repo root:
+2. **Train** (repo root; default K = 0..14):
 
 ```bash
 uv run python scripts/run_experiments.py train --experiment-root experiments/PURE_exper
 ```
 
-Optional flags: `--dataset pure_unsupervised`, `--k-min`, `--k-max`.
-
-Additional Hydra overrides can be forwarded to `train.py` after `--`, for example:
-
-```bash
-uv run python scripts/run_experiments.py train --experiment-root experiments/PURE_exper -- training.epochs=50 training.batch_size=16 training.use_lightning=true
-```
-
-3. Evaluate saved experiments:
+3. **Evaluate:**
 
 ```bash
 uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_exper
 ```
 
-You can also forward Hydra overrides to `test.py` after `--`, for example:
+`--dataset`, `--k-min` / `--k-max`, and Hydra overrides after `--` are documented in [INSTRUCTIONS.md](INSTRUCTIONS.md) (e.g. [§7](INSTRUCTIONS.md#7-configuration-and-hydra-overrides), [quick commands](INSTRUCTIONS.md#12-quick-command-cheat-sheet-pure)).
 
-```bash
-uv run python scripts/run_experiments.py test --experiment-root experiments/PURE_exper -- paths.results_dir=results_alt paths.predictions_dir=predictions_alt window_size=12
-```
+## Experiment tracking
+
+TensorBoard, checkpoint manifest, and summaries live under each fold directory — see [INSTRUCTIONS.md §9](INSTRUCTIONS.md#9-monitoring-and-artifacts).
 
 ## Development
 
@@ -169,7 +88,7 @@ uv run python scripts/run_experiments.py test --experiment-root experiments/PURE
 
 ## Notes
 
-When new dataloaders are added, register them in [src/datasets/dataset_registry.py](src/datasets/dataset_registry.py). For **evaluation** across held-out test corpora, you can still extend `src/test.py` (e.g. its testing-dataset list). For **training-time** validation on another corpus, use `validation_dataset` / `validation_fps` as above.
+Register new dataset modes in [src/datasets/dataset_registry.py](src/datasets/dataset_registry.py). Step-by-step for a new corpus: [docs/ADDING_A_DATASET.md](docs/ADDING_A_DATASET.md). Training-time validation on another corpus: Hydra `validation_dataset` / `validation_fps` ([INSTRUCTIONS.md §7](INSTRUCTIONS.md#7-configuration-and-hydra-overrides)).
 
 ### Citation
 

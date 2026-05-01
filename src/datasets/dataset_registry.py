@@ -22,5 +22,10 @@ def _register_datasets() -> None:
     DATASET_REGISTRY.register("ubfc_supervised", UBFCSupervisedTrain)
     DATASET_REGISTRY.register("ubfc_testing", UBFCSupervisedTest)
 
+    from datasets.mixed_train import MixedTrainDataset
+
+    DATASET_REGISTRY.register("mixed_unsupervised", MixedTrainDataset)
+    DATASET_REGISTRY.register("mixed_supervised", MixedTrainDataset)
+
 
 _register_datasets()

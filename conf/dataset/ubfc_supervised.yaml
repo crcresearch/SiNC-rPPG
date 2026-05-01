@@ -2,3 +2,7 @@ dataset: ubfc_supervised
 fps: 30
 frame_width: 64
 frame_height: 64
+optimization_step: supervised
+validation_step: supervised
+losses: supervised
+validation_loss: supervised

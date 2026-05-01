@@ -25,7 +25,9 @@ def hydra_cfg_to_arg_namespace(cfg: DictConfig) -> SimpleNamespace:
     """Flatten ``model``, ``dataset``, ``training``, ``paths`` and top-level run keys."""
     repo = get_repo_root()
     merged: dict = {}
-    for group in ("model", "dataset", "training", "paths"):
+    # Order matters: later groups overwrite earlier keys. Dataset after training so
+    # e.g. pure_supervised.yaml can set optimization_step/losses for supervised runs.
+    for group in ("model", "training", "paths", "dataset"):
         if group in cfg and cfg[group] is not None:
             merged.update(OmegaConf.to_container(cfg[group], resolve=True))
     root_cfg = OmegaConf.to_container(cfg, resolve=True)
